@@ -1,14 +1,20 @@
 #include <Arduino.h>
 #include <math.h>
+#include <EEPROM.h>
 #define BYTE_INICIA 0xAA
 #define BYTE_PARA 0x55
 #include <HCSR04.h>    // <-- Biblioteca Ultrassonico
 
 bool atacante = false;  // true = atacante, false = defensor
 bool jaSaudouCabeca = false;  // Flag para enviar "OK" no startup
+bool corGolAzul = false;      // false = amarelo, true = azul
 
 #define ID_PLACA_OLHO 0x01
 #define ID_PLACA_PE 0x02
+#define ID_PLACA_CAMERA 0x03
+
+#define EEPROM_SIZE 16
+#define EEPROM_ADDR_COR_GOL 0
 
 
 
@@ -36,7 +42,6 @@ void L_Ultra() {     // <-- Função para leitura dos sensores ultrassonicos
 #define RX_CAMERA 40 
 #define TX_CAMERA 50
 //#define ID_PLACA_CIMA 0x01  // antigo
-#define ID_PLACA_OLHO 0x01  // usado ao enviar dados para cabeça
 
 
 
@@ -131,7 +136,31 @@ struct Pacote {
 struct PacoteEstado {
   bool sozinho;    // mantido para compatibilidade
   bool atacante;   // true = atacante, false = defensor
+  bool corGolAzul; // true = azul, false = amarelo
 };
+
+// Dados recebidos da camera:
+// [gol_detectado (1B)] [erro_gol_x10 (int16, big-endian)] [pixels (uint16, big-endian)]
+bool golDetectadoCamera = false;
+float erroGolCamera = 0.0;
+uint16_t pixelsGolCamera = 0;
+
+void EnviarCorParaCamera() {
+  Serial2.write(BYTE_INICIA);
+  Serial2.write(ID_PLACA_OLHO);
+  Serial2.write(corGolAzul ? 1 : 0);
+  Serial2.write(BYTE_PARA);
+}
+
+void SalvarCorGolEEPROM() {
+  EEPROM.writeByte(EEPROM_ADDR_COR_GOL, corGolAzul ? 1 : 0);
+  EEPROM.commit();
+}
+
+void CarregarCorGolEEPROM() {
+  uint8_t val = EEPROM.readByte(EEPROM_ADDR_COR_GOL);
+  corGolAzul = (val == 1);
+}
 
 void LeituraSerial() {
   while (Serial1.available() >= 2) {
@@ -144,10 +173,42 @@ void LeituraSerial() {
           byte stop = Serial1.read();
           if (stop == BYTE_PARA) {
             atacante = temp.atacante;  // recebe o papel (atacante/defensor)
+            bool novaCorGol = temp.corGolAzul;
+            if (novaCorGol != corGolAzul) {
+              corGolAzul = novaCorGol;
+              SalvarCorGolEEPROM();
+              EnviarCorParaCamera();
+            }
           }
         }
       }
     }
+  }
+}
+
+void LeituraCamera() {
+  // Protocolo camera: [0xAA][ID=0x03][5 bytes payload][0x55]
+  while (Serial2.available() >= 8) {
+    if (Serial2.read() != BYTE_INICIA) continue;
+
+    byte id = Serial2.read();
+    if (id != ID_PLACA_CAMERA) {
+      continue;
+    }
+
+    byte payload[5];
+    Serial2.readBytes(payload, 5);
+    byte stop = Serial2.read();
+    if (stop != BYTE_PARA) {
+      continue;
+    }
+
+    golDetectadoCamera = (payload[0] != 0);
+
+    int16_t erroRaw = (int16_t)((payload[1] << 8) | payload[2]);
+    erroGolCamera = erroRaw / 10.0;
+
+    pixelsGolCamera = (uint16_t)((payload[3] << 8) | payload[4]);
   }
 }
 
@@ -177,7 +238,16 @@ void enviarDados() {
 void setup() {
     for (int i = 0; i < NUM_SENSORES; i++)
       pinMode(sensoresTSOP[i], INPUT);
+
+    EEPROM.begin(EEPROM_SIZE);
+    CarregarCorGolEEPROM();
+
     Serial1.begin(9600, SERIAL_8N1, RX_CABECA, TX_CABECA);
+    Serial2.begin(19200, SERIAL_8N1, RX_CAMERA, TX_CAMERA);
+
+    // Ao ligar, envia uma vez a cor salva para camera
+    delay(50);
+    EnviarCorParaCamera();
 }
 
 void loop(){
@@ -194,7 +264,9 @@ void loop(){
   // ler estado recebido da cabeça (atacante/defensor)
   LeituraSerial();
 
+  // ler dados recebidos da camera (gol detectado/erro/pixels)
+  LeituraCamera();
+
   enviarDados(); 
   delay(50);
-}
 }

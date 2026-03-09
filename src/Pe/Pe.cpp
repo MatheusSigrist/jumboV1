@@ -69,6 +69,7 @@ struct Pacote {
 struct PacoteEstado {
   bool sozinho;    // mantido para compatibilidade
   bool atacante;   // true = atacante (repulsao), false = defensor (atraçao)
+  bool corGolAzul; // compatibilidade com pacote enviado pela Cabeça
 };
 
 void LeituraSerial() {

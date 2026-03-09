@@ -68,6 +68,7 @@ struct PacoteBaixo {
 struct PacoteEstado {
   bool sozinho;
   bool atacante;  // role do robô: true = atacante, false = defensor
+  bool corGolAzul; // true = azul, false = amarelo
 };
 
 struct MenuData {
@@ -103,6 +104,7 @@ bool olhoRespondeu = false;
 bool peRespondeu = false;
 bool atacante = true;  // true = atacante, false = defensor
 float ultraT_parceiro = 0;  // valor de ultraT recebido do outro robô
+bool corGolAzul = false;    // false = amarelo (padrao), true = azul
 
 
 void LeituraSerial() {
@@ -196,6 +198,7 @@ void EnviarSerial() {
     PacoteEstado estado;
     estado.sozinho = sozinho;
     estado.atacante = atacante;
+  estado.corGolAzul = corGolAzul;
 
     // Enviar para placa OLHO (Serial1)
     Serial1.write(BYTE_INICIA);
@@ -305,6 +308,9 @@ void verificarBotoes() {
       // Botão 1 = Scroll UP no submenu de calibração
       itemSubMenu--;
       if (itemSubMenu < 0) itemSubMenu = 1;  // wrap around
+    } else if (estadoAtual == CALIBRACAO && subMenuCalibracao == SUBMENU_GOL) {
+      // Botão 1 = alternar seleção de cor do gol (0=AMARELO, 1=AZUL)
+      itemSubMenu = (itemSubMenu == 0) ? 1 : 0;
     }
   }
   
@@ -320,6 +326,9 @@ void verificarBotoes() {
       // Botão 2 = Scroll DOWN no submenu de calibração
       itemSubMenu++;
       if (itemSubMenu > 1) itemSubMenu = 0;  // wrap around
+    } else if (estadoAtual == CALIBRACAO && subMenuCalibracao == SUBMENU_GOL) {
+      // Botão 2 = alternar seleção de cor do gol (0=AMARELO, 1=AZUL)
+      itemSubMenu = (itemSubMenu == 0) ? 1 : 0;
     }
   }
   
@@ -339,6 +348,7 @@ void verificarBotoes() {
       // Select no submenu principal = entra no submenu escolhido
       if (itemSubMenu == 0) {
         subMenuCalibracao = SUBMENU_GOL;
+        itemSubMenu = corGolAzul ? 1 : 0;  // ao entrar no GOL, mostra cor atual
       } else if (itemSubMenu == 1) {
         subMenuCalibracao = SUBMENU_BUSSOLA;
       }
@@ -347,9 +357,11 @@ void verificarBotoes() {
       GravarBussolaEEPROM();
       subMenuCalibracao = SUBMENU_PRINCIPAL;  // volta ao submenu principal
     } else if (estadoAtual == CALIBRACAO && subMenuCalibracao == SUBMENU_GOL) {
-      // Select durante calibração do gol = implementar depois
-      // Por enquanto volta apenas
+      // Select durante calibração do gol = salva cor e envia para OLHO
+      corGolAzul = (itemSubMenu == 1);  // 0=AMARELO, 1=AZUL
+      EnviarSerial();
       subMenuCalibracao = SUBMENU_PRINCIPAL;
+      itemSubMenu = 0;
     }
   }
   
@@ -455,6 +467,9 @@ void setup(){
   
   // Enviar menu inicial para músculo
   EnviarMenuParaMusculo();
+
+  // Enviar estado inicial (inclui cor do gol) para OLHO e PE
+  EnviarSerial();
   
   // Inicializar lastSend para evitar timeout na primeira iteração
   lastSend = millis();
@@ -541,6 +556,9 @@ void loop(){
       if (subMenuCalibracao == SUBMENU_PRINCIPAL) {
         // Exibir submenu (Gol / Bussola)
         // MenuData será usado para passagem de dados ao Musculo
+        EnviarMenuParaMusculo();
+      } else if (subMenuCalibracao == SUBMENU_GOL) {
+        // Exibir opções de cor do gol (AMARELO / AZUL)
         EnviarMenuParaMusculo();
       } else if (subMenuCalibracao == SUBMENU_BUSSOLA) {
         // Monitorar bussola em tempo real e enviar valor para Musculo exibir

@@ -312,7 +312,28 @@ void desenharSubmenuCalibracao() {
   else if (menuRecebido.subMenuCal == 1) {
     display.println("=== CAL GOL ===");
     display.println();
-    display.println("Em desenvolvimento...");
+
+    if (menuRecebido.itemSubMenuCal == 0) {
+      display.fillRect(0, 24, 128, 8, SSD1306_WHITE);
+      display.setTextColor(SSD1306_BLACK);
+      display.setCursor(5, 25);
+      display.println("AMARELO");
+      display.setTextColor(SSD1306_WHITE);
+    } else {
+      display.setCursor(5, 25);
+      display.println("AMARELO");
+    }
+
+    if (menuRecebido.itemSubMenuCal == 1) {
+      display.fillRect(0, 40, 128, 8, SSD1306_WHITE);
+      display.setTextColor(SSD1306_BLACK);
+      display.setCursor(5, 41);
+      display.println("AZUL");
+      display.setTextColor(SSD1306_WHITE);
+    } else {
+      display.setCursor(5, 41);
+      display.println("AZUL");
+    }
   }
   
   display.display();
