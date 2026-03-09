@@ -186,9 +186,6 @@ void loop() {
 
 
 
-
-  Serial.print("Atacante: ");
-
 delay(50);
 }
 
